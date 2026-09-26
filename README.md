@@ -27,7 +27,7 @@ A production-style full-stack weather dashboard: **React 19 + Vite** on the fron
 - Response shaping: m/s → km/h, visibility → km, Magnus **dew-point**, solar-elevation **UV estimate**, 3-hour slots aggregated into calendar days
 - Uniform error envelope `{ success:false, code, message }` mapped from OpenWeather failures
 - Three upstreams behind one interface: `live` (real OpenWeather), `fixtures` (no-key demo data), `mock` (frontend-only)
-- `GET /api/health` reports mode for Render health checks and the honest **“Demo data”** badge
+- `GET /api/health` reports mode for health checks and the honest **“Demo data”** badge
 
 ## Architecture
 
@@ -53,6 +53,9 @@ flowchart LR
 
 ```
 wheather/
+├── api/                        # Vercel Function entries → mount the Express app
+│   ├── [...slug].js            # every single-segment /api/* route
+│   └── weather/ forecast/      # the two multi-segment coordinate routes
 ├── client/                     # React 19 + Vite SPA
 │   ├── src/
 │   │   ├── components/         # 18 components (charts, cards, search, …)
@@ -61,7 +64,7 @@ wheather/
 │   │   ├── services/           # weatherApi.js (fetch + cache) · mockData.js
 │   │   ├── styles/             # variables · base · components · animations · responsive
 │   │   └── utils/              # weatherUtils · constants
-│   ├── vercel.json             # SPA rewrite
+│   ├── vercel.json             # SPA rewrite (client-only deploys)
 │   └── vite.config.js          # /api → :5000 in dev
 ├── server/                     # Express 5 API
 │   ├── config/env.js           # single place for process.env
@@ -70,9 +73,11 @@ wheather/
 │   ├── controllers/ routes/ middleware/
 │   ├── fixtures/               # OpenWeather-shaped local data (demo mode)
 │   ├── scripts/                # selftest.mjs · smoketest.mjs
-│   └── server.js
+│   ├── server.js               # exports the app (listens only when run directly)
+│   └── vercel.js               # serverless handler (path normaliser → app)
 ├── docs/screenshots/
-├── render.yaml                 # Render blueprint
+├── vercel.json                 # one-project deploy: build client, SPA rewrite, /api excluded
+├── render.yaml                 # optional: API on Render instead
 ├── DEPLOYMENT.md               # step-by-step deploy guide
 └── README.md
 ```
@@ -87,7 +92,7 @@ wheather/
 | Safety | express-validator, express-rate-limit | validation + abuse protection |
 | Data | OpenWeather (weather/forecast/air/geo) | one key covers every endpoint |
 | Charts | hand-rolled SVG | no 100 kB chart dependency |
-| Deploy | Vercel (client) + Render (API) | free tiers, git-push deploys |
+| Deploy | Vercel (client + API) | one project, same-origin `/api` |
 
 ## Quick start
 
@@ -128,7 +133,7 @@ Open **http://localhost:5173**. Out of the box it runs in **fixtures mode** (`se
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `VITE_API_URL` | *(empty → same-origin `/api`)* | required in production builds |
+| `VITE_API_URL` | *(empty → same-origin `/api`)* | leave empty when client + API share one origin |
 | `VITE_USE_MOCK` | `true` | frontend-only mock data (no server needed) |
 
 ### Scripts
@@ -204,12 +209,11 @@ Client changes are verified with `npm run lint` + `npm run build`, plus headless
 
 ## Deployment
 
-Two free-tier services from one repo — see **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full click-through:
+One Vercel project serves the client and the Express API from a single origin — see **[DEPLOYMENT.md](DEPLOYMENT.md)** for the details:
 
-- **API → Render** via `render.yaml` (blueprint, health check on `/api/health`)
-- **Client → Vercel** (root directory `client`, SPA rewrite included; Netlify config also provided)
-
-Switch the live API to real weather data by setting `OPENWEATHER_API_KEY` + `UPSTREAM_MODE=live` in Render's environment and re-running the smoke suite.
+- Root `vercel.json` builds `client/` and rewrites non-`/api` paths to `index.html`
+- `api/*.js` mounts the Express app as Vercel Functions (`server/vercel.js` is the handler)
+- Runs in **fixtures** mode out of the box; set `OPENWEATHER_API_KEY` + `UPSTREAM_MODE=live` in the project environment and redeploy for real data, then re-run the smoke suite
 
 ## Accessibility & performance
 

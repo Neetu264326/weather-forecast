@@ -1,85 +1,70 @@
 # Deployment
 
-Two deploy targets from one repo:
+One Vercel project serves the whole app — React client **and** the Express API — from a single origin.
 
-| Piece | Host | Root directory | Notes |
+| Piece | Host | Where it lives | Notes |
 |---|---|---|---|
-| Express API | [Render](https://dashboard.render.com) | `server/` | blueprint file: `render.yaml` (repo root) |
-| React client | [Vercel](https://vercel.com/new) (or Netlify) | `client/` | SPA rewrite: `client/vercel.json` / `netlify.toml` |
+| React client | [Vercel](https://vercel.com/new) | `client/` → built to `client/dist` | config: `vercel.json` (repo root) |
+| Express API | Vercel Functions | `api/*.js` → `server/` | fixtures mode, no key needed |
 
-## 1. Push the repo to GitHub
+## How it is wired
+
+- `vercel.json` (root) — project root is the repo root: installs both workspaces, runs
+  `vite build`, publishes `client/dist`, and rewrites every non-`/api` path to
+  `/index.html` (SPA fallback). `/api/*` is excluded from the rewrite so it reaches the
+  functions.
+- `api/[...slug].js` — mounts the Express app for every single-segment `/api/*` route.
+- `api/weather/coordinates.js`, `api/forecast/coordinates.js` — the two multi-segment
+  routes (Vercel's `api/` router matches `[...slug]` to one segment only).
+- `server/vercel.js` — the shared handler: normalises the request path, then hands off
+  to the Express app exported by `server/server.js`.
+- `client/vercel.json` and `client/netlify.toml` are only used if you deploy the client
+  on its own; the root `vercel.json` wins for this project.
+
+## Redeploy
 
 ```bash
-git add .
-git commit -m "WeatherIQ: full-stack weather intelligence dashboard"
-git remote add origin <your-repo-url>
-git push -u origin master
+vercel deploy --prod --yes
 ```
 
-## 2. Deploy the API (Render)
-
-1. Render → **New → Blueprint** → pick the repo (uses `render.yaml` automatically).
-2. After the service is created, set environment variables (service → **Environment**):
+## Environment variables (project → Settings → Environment Variables)
 
 | Variable | Value | Required |
 |---|---|---|
-| `NODE_ENV` | `production` | set by blueprint |
-| `CLIENT_URL` | your Vercel URL, e.g. `https://weatheriq.vercel.app` (exact origin, no trailing `/`) | **yes** — CORS |
-| `UPSTREAM_MODE` | `fixtures` (works with no key) or `live` | yes |
-| `OPENWEATHER_API_KEY` | your key | only for `live` |
-| `RATE_LIMIT_MAX` | `120` (per 15 min per IP) | optional |
+| `UPSTREAM_MODE` | `fixtures` (demo data, no key) or `live` | **yes** — defaults to `live` |
+| `OPENWEATHER_API_KEY` | your key from <https://openweathermap.org/api> | only for `live` |
+| `CLIENT_URL` | your production origin, e.g. `https://weather-forecast-eta-seven.vercel.app` | CORS, exact origin |
 
-3. Health check is `/api/health` — Render restarts the service if it stops answering.
+`VITE_API_URL` is intentionally **not** set: the client calls `/api` on its own domain.
+`VITE_USE_MOCK` stays unset so the real backend serves the data.
 
-## 3. Deploy the client (Vercel)
-
-1. Vercel → **Add New → Project** → import the repo.
-2. **Root Directory**: `client` · Framework preset: **Vite** (auto-detected).
-3. Environment variables (**must be set before building**):
-
-| Variable | Value |
-|---|---|
-| `VITE_API_URL` | your Render URL, e.g. `https://weatheriq-api.onrender.com` |
-| `VITE_USE_MOCK` | `false` |
-
-4. Deploy. Copy the site URL, paste it into Render's `CLIENT_URL`, redeploy the API.
-
-> `VITE_API_URL` is baked into the bundle at build time. If it is missing the app
-> logs `VITE_API_URL is not set` to the browser console and every request fails.
-> `client/netlify.toml` exists as an alternative (publish `dist`, SPA redirect included).
-
-## 4. Verify the deployment
+## Verify
 
 ```bash
-# from your machine, against the deployed API
-SMOKE_BASE=https://weatheriq-api.onrender.com npm run smoke   # in server/
-
-# quick probes
-curl https://weatheriq-api.onrender.com/api/health   # {"data":{"upstream":...}}
-curl "https://weatheriq-api.onrender.com/api/weather?city=Delhi"
+cd server
+SMOKE_BASE=https://<your-production-domain> npm run smoke   # 11 end-to-end checks
 ```
 
-Then open the client URL: dashboard renders, header badge shows **Demo data**
-only while `upstream` is `fixtures`.
+Open the site: the header badge shows **Demo data** while `upstream` is `fixtures`.
 
-## 5. Switch to real OpenWeather data
+## Switch to live OpenWeather data
 
-Render → Environment → set:
+1. Set `OPENWEATHER_API_KEY` and `UPSTREAM_MODE=live` in the project's environment.
+2. Redeploy (`vercel deploy --prod --yes`).
+3. Re-run `SMOKE_BASE=... npm run smoke` — `/api/health` now reports `upstream: "live"`.
 
-```
-OPENWEATHER_API_KEY=<your key>
-UPSTREAM_MODE=live
-```
+## Alternative: Render API + Vercel client
 
-Save (service redeploys), then re-run `SMOKE_BASE=... npm run smoke` — the badge
-disappears because `/api/health` now reports `upstream: "live"`.
+`render.yaml` still deploys the API on Render instead (blueprint, health check on
+`/api/health`). In that split setup set `VITE_API_URL` on Vercel to the Render URL and
+`CLIENT_URL` on Render to the Vercel URL before building.
 
 ## Troubleshooting
 
 | Symptom | Cause → fix |
 |---|---|
-| Browser console: `VITE_API_URL is not set` | env var missing at Vercel build → add + redeploy |
-| CORS error in console | `CLIENT_URL` on Render ≠ exact client origin (scheme, host, no trailing slash) |
-| 429 responses | lower traffic window or raise `RATE_LIMIT_MAX` |
-| 503 `code:"config"` | `UPSTREAM_MODE=live` without `OPENWEATHER_API_KEY` |
-| Blank/error only on refresh of `/compare` | SPA rewrite missing → `vercel.json`/`netlify.toml` not applied (check root directory) |
+| `/api/*` returns the SPA's `index.html` | SPA rewrite no longer excludes `/api` → restore `"/((?!api/).*)"` in root `vercel.json` |
+| `/api/weather/coordinates` → empty 404 | multi-segment routes need their own file under `api/` (see wiring above) |
+| `503 code:"config"` | `UPSTREAM_MODE=live` without `OPENWEATHER_API_KEY` |
+| Badge says *Demo data* after adding a key | env var changed but not redeployed → redeploy |
+| 429 responses | raise `RATE_LIMIT_MAX` in the project environment |

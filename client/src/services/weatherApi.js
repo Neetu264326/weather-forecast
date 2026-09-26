@@ -13,7 +13,7 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 if (import.meta.env.PROD && !USE_MOCK && !BASE) {
   console.warn(
-    '[WeatherIQ] VITE_API_URL is not set — /api calls will hit this domain and fail. Set it to your deployed Express URL before building.',
+    '[WeatherIQ] VITE_API_URL is not set — /api calls stay on this domain. Correct when the API is deployed alongside the client; otherwise set VITE_API_URL to the API origin before building.',
   )
 }
 

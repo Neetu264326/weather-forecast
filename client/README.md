@@ -12,5 +12,6 @@ npm run lint
 npm run build
 ```
 
-Environment (`.env`): `VITE_API_URL` (required for production builds),
-`VITE_USE_MOCK` (`true` = frontend-only demo data, no server needed).
+Environment (`.env`): `VITE_API_URL` (leave empty when the API runs on the same
+origin — the root `vercel.json` deploy does this), `VITE_USE_MOCK`
+(`true` = frontend-only demo data, no server needed).
