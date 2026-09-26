@@ -71,8 +71,11 @@ const icon = (base, isDay) => `${base}${isDay ? 'd' : 'n'}`
 
 const matchCity = (query) => {
   const q = String(query).toLowerCase().trim()
-  return CITIES.find(
-    (c) => c.aliases.includes(q) || c.name.toLowerCase() === q || c.name.toLowerCase().includes(q),
+  if (!q) return undefined
+  return (
+    CITIES.find(
+      (c) => c.aliases.includes(q) || c.name.toLowerCase() === q || c.name.toLowerCase().includes(q),
+    ) ?? synthCity(q)
   )
 }
 
@@ -89,6 +92,56 @@ const requireCity = (city) => {
     })
   }
   return city
+}
+
+const CONDS = [CLEAR, FEW, SCATTERED, OVERCAST, LIGHT_RAIN, MODERATE_RAIN, MIST]
+
+const hash = (str) => {
+  let h = 5381
+  for (let i = 0; i < str.length; i += 1) h = ((h << 5) + h + str.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+
+const titleCase = (str) =>
+  str
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+
+const aqiFor = (pm25) => (pm25 > 55 ? 4 : pm25 > 35 ? 3 : pm25 > 20 ? 2 : 1)
+
+/**
+ * Demo city for any query the registry does not know: deterministic weather
+ * derived from a hash of the name, so the same search always answers the same.
+ */
+const synthCity = (query) => {
+  const name = titleCase(String(query).trim())
+  const h = hash(name.toLowerCase())
+  const tMin = 6 + (h % 22)
+  const pm25 = 8 + ((h >>> 13) % 60)
+  return {
+    name,
+    country: '',
+    lat: Math.round((((h % 13000) / 100) - 60) * 10) / 10,
+    lon: Math.round(((((h >>> 7) % 36000) / 100) - 180) * 10) / 10,
+    tz: (((h >>> 4) % 27) - 12) * HOUR,
+    temp: [tMin, tMin + 6 + ((h >>> 3) % 8)],
+    humidity: 35 + ((h >>> 9) % 50),
+    wind: 6 + ((h >>> 11) % 20),
+    deg: (h >>> 17) % 360,
+    cond: CONDS[(h >>> 19) % CONDS.length],
+    alt: CONDS[(h >>> 21) % CONDS.length],
+    pop: ((h >>> 23) % 6) / 10,
+    aqi: aqiFor(pm25),
+    pm25,
+    pm10: Math.round(pm25 * 1.7),
+  }
+}
+
+const synthAir = (lat, lon) => {
+  const h = hash(`${lat.toFixed(2)},${lon.toFixed(2)}`)
+  const pm25 = 8 + ((h >>> 5) % 60)
+  return { lat, lon, aqi: aqiFor(pm25), pm25, pm10: Math.round(pm25 * 1.7) }
 }
 
 function buildWeather(city, now) {
@@ -216,11 +269,14 @@ function buildAir(city, now) {
 
 function buildGeo(query) {
   const q = String(query).toLowerCase().trim()
-  return CITIES.filter(
+  const curated = CITIES.filter(
     (c) => c.aliases.some((a) => a.includes(q) || q.includes(a)) || c.name.toLowerCase().includes(q),
   )
     .slice(0, 6)
     .map((c) => ({ name: c.name, country: c.country, state: '', lat: c.lat, lon: c.lon }))
+  if (curated.length > 0 || !q) return curated
+  const s = synthCity(q)
+  return [{ name: s.name, country: s.country, state: '', lat: s.lat, lon: s.lon }]
 }
 
 /** URL → fixture dispatch (mimics fetchJson for the same routes). */
@@ -241,7 +297,10 @@ export function serveFixture(rawUrl) {
   }
 
   if (path.endsWith('/data/2.5/air_pollution')) {
-    return buildAir(nearestCity(+param('lat'), +param('lon')), now)
+    const lat = +param('lat')
+    const lon = +param('lon')
+    const curated = CITIES.find((c) => Math.abs(c.lat - lat) <= 0.5 && Math.abs(c.lon - lon) <= 0.5)
+    return buildAir(curated ?? synthAir(lat, lon), now)
   }
 
   if (path.endsWith('/geo/1.0/direct')) {

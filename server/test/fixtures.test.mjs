@@ -28,11 +28,16 @@ test('weather fixture by coordinates picks the nearest city', () => {
   assert.equal(raw.name, 'New Delhi')
 })
 
-test('unknown city throws an exposed 404', () => {
-  assert.throws(
-    () => serveFixture(url('/data/2.5/weather', { q: 'Zzzzznotacity' })),
-    (err) => err instanceof HttpError && err.status === 404 && err.code === 'notfound' && err.expose,
-  )
+test('unknown city resolves to a deterministic demo city', () => {
+  const raw = serveFixture(url('/data/2.5/weather', { q: 'Zzzzznotacity' }))
+  const payload = toWeatherPayload(raw)
+  assert.equal(payload.city.name, 'Zzzzznotacity')
+  assert.equal(payload.city.country, '')
+  assert.equal(typeof payload.current.temp, 'number')
+  const again = serveFixture(url('/data/2.5/weather', { q: 'Zzzzznotacity' }))
+  assert.equal(again.name, raw.name)
+  assert.equal(again.coord.lat, raw.coord.lat)
+  assert.equal(again.coord.lon, raw.coord.lon)
 })
 
 test('forecast fixture has 40 slots and aggregates into days', () => {
@@ -56,14 +61,18 @@ test('air fixture exposes aqi 1–5 with pollutants', () => {
   assert.ok(raw.list[0].components.pm10 > 0)
 })
 
-test('geo fixture matches partial queries and returns [] otherwise', () => {
+test('geo fixture matches partial queries and suggests a demo city otherwise', () => {
   const berlin = serveFixture(url('/geo/1.0/direct', { q: 'ber' }))
   assert.ok(berlin.length >= 1)
   assert.equal(berlin[0].name, 'Berlin')
   assert.equal(typeof berlin[0].lat, 'number')
 
-  const nothing = serveFixture(url('/geo/1.0/direct', { q: 'qqqqzzzz' }))
-  assert.deepEqual(nothing, [])
+  const synth = serveFixture(url('/geo/1.0/direct', { q: 'qqqqzzzz' }))
+  assert.equal(synth.length, 1)
+  assert.equal(synth[0].name, 'Qqqqzzzz')
+  const weather = serveFixture(url('/data/2.5/weather', { q: synth[0].name }))
+  assert.equal(weather.coord.lat, synth[0].lat)
+  assert.equal(weather.coord.lon, synth[0].lon)
 })
 
 test('fixture dispatch 404s for unknown upstream paths', () => {

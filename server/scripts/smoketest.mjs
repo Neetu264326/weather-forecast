@@ -133,10 +133,15 @@ await check('comparison fan-out (3 cities)', async () => {
   assert.match(names[2], /Bengaluru|Bangalore/i, `names[2]=${names[2]}`)
 })
 
-await check('unknown city → 404 notfound', async () => {
+await check('unknown city → demo city (fixtures) / 404 notfound (live)', async () => {
   const { status, body } = await get('/api/weather?city=Zzzzznotacity')
-  assert.equal(status, 404, `HTTP ${status}`)
-  assert.equal(body.code, 'notfound')
+  if (mode === 'fixtures') {
+    assert.equal(status, 200, `HTTP ${status}`)
+    assert.equal(body.data.city.name, 'Zzzzznotacity')
+  } else {
+    assert.equal(status, 404, `HTTP ${status}`)
+    assert.equal(body.code, 'notfound')
+  }
 })
 
 await check('invalid latitude → 400 validation', async () => {

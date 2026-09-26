@@ -135,11 +135,12 @@ test('validation: short geocoding query → 400', async () => {
   assert.equal(status, 400)
 })
 
-test('unknown city → 404 with the friendly message', async () => {
+test('unknown city answers a demo city in fixtures mode', async () => {
   const { status, body } = await get('/api/weather?city=Zzzzznotacity')
-  assert.equal(status, 404)
-  assert.equal(body.code, 'notfound')
-  assert.match(body.message, /couldn't find that city/)
+  assert.equal(status, 200)
+  assert.equal(body.success, true)
+  assert.equal(body.data.city.name, 'Zzzzznotacity')
+  assert.equal(typeof body.data.current.temp, 'number')
 })
 
 test('unknown endpoint → 404 not_found', async () => {

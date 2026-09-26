@@ -193,7 +193,7 @@ curl "http://localhost:5000/api/weather?city=Delhi"
 - **Units** — OpenWeather *metric* everywhere; wind m/s → km/h, visibility m → km. °F is a client-side display conversion.
 - **Dew point** — computed with the Magnus formula (not provided by the current-weather endpoint).
 - **UV index** — the free air-pollution endpoint has no UV field, so the server *estimates* it from solar elevation + cloud cover and labels it as such in the UI.
-- **Fixtures vs live** — fixtures are OpenWeather-*shaped* local payloads so the full pipeline runs without a key; the badge and `/api/health` always tell you which mode is active. No mode silently pretends to be another.
+- **Fixtures vs live** — fixtures are OpenWeather-*shaped* local payloads so the full pipeline runs without a key; the 10 registry cities carry curated numbers, and any other search returns a deterministic demo city derived from the name (same search → same weather). The badge and `/api/health` always tell you which mode is active. No mode silently pretends to be another.
 
 ## Testing
 
