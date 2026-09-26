@@ -1,0 +1,31 @@
+{
+  "name": "weather-intelligence-api",
+  "version": "1.0.0",
+  "description": "Express API layer for the WeatherIQ dashboard (OpenWeather proxy + response shaping)",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "test": "node --test",
+    "smoke": "node scripts/smoketest.mjs",
+    "check": "node --check server.js"
+  },
+  "keywords": [
+    "express",
+    "openweather",
+    "rest-api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.4",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "express-validator": "^7.3.2"
+  }
+}

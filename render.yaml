@@ -1,0 +1,25 @@
+# Render blueprint — API service (https://dashboard.render.com → New → Blueprint)
+services:
+  - type: web
+    name: weatheriq-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # fixtures = runs without a key; switch to "live" once the key is set
+      - key: UPSTREAM_MODE
+        value: fixtures
+      - key: OPENWEATHER_API_KEY
+        sync: false
+      # exact origin(s) of your deployed client, comma-separated
+      - key: CLIENT_URL
+        value: https://your-client.vercel.app
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "900000"
+      - key: RATE_LIMIT_MAX
+        value: "120"
